@@ -1,0 +1,8 @@
+# Example banned words file
+# One word per line
+confidential
+proprietary
+secret
+internal
+classified
+restricted
