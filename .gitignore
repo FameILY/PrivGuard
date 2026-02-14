@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+
+# Audio files (keep examples)
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+!tests/fixtures/*.wav
+
+# Output files
+output/
+*.json
+
+# Models and cache
+models/
+.cache/
+*.pt
+*.pth
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+temp/
