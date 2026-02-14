@@ -5,9 +5,21 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useSession, signIn, signOut } from "next-auth/react"
 
 export default function Home() {
   const [hoveredFeature, setHoveredFeature] = useState(null);
+   const { data: session } = useSession()
+
+
+  const handleTrial = () => {
+      if (!session) {
+        signIn();
+      } else {
+        window.location.href = '/dash';
+      }
+    }
+
 
   const features = [
     {
@@ -109,8 +121,8 @@ export default function Home() {
                 <a href="#features" className="text-gray-300 hover:text-white transition-colors text-sm font-medium">Features</a>
                 <a href="#use-cases" className="text-gray-300 hover:text-white transition-colors text-sm font-medium">Use Cases</a>
                 <a href="#pricing" className="text-gray-300 hover:text-white transition-colors text-sm font-medium">Pricing</a>
-                <Button className="bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 text-white border-0 shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 transition-all duration-300">
-                  Get Started
+                <Button onClick={session ? () => signOut() : () => signIn()} className="bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 text-white border-0 shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 transition-all duration-300">
+                  {session ? "Sign Out" : "Sign In"}
                 </Button>
               </div>
             </div>
@@ -141,8 +153,8 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-              <Button size="lg" className="group bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 text-white border-0 text-lg px-8 py-6 shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50 transition-all duration-300 hover:scale-105 w-full sm:w-auto">
-                Start Free Trial
+              <Button onClick={handleTrial} size="lg" className="group bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 text-white border-0 text-lg px-8 py-6 shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50 transition-all duration-300 hover:scale-105 w-full sm:w-auto">
+                {!session ? "Start Free Trial" : "Go to Dashboard"}
                 <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
               <Button size="lg" variant="outline" className="text-lg px-8 py-6 bg-white/5 border-white/10 hover:bg-white/10 text-white backdrop-blur-sm w-full sm:w-auto">
