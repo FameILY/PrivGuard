@@ -1,6 +1,5 @@
 import os
 import re
-import string
 import torch
 import whisperx
 from transformers import pipeline
@@ -13,13 +12,13 @@ INPUT_DIR = "input"
 OUTPUT_DIR = "output"
 
 WHISPER_MODEL = "medium"
+NER_MODEL = "dslim/bert-base-NER"
+
+NER_LABELS = {"PER", "ORG", "LOC"}
 BEEP_FREQ = 1000
 MIN_BEEP_MS = 300
 
-NER_MODEL = "dslim/bert-base-NER"
-NER_LABELS = {"PER", "ORG", "LOC"}
-
-# ======================================== #
+# ========================================= #
 
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -29,9 +28,9 @@ torch_device = "cuda" if device == 0 else "cpu"
 
 print(f"🔥 Device: {torch_device}")
 
-# ================= LOAD MODELS (ONCE) ================= #
+# ================= LOAD MODELS ================= #
 
-print("📥 Loading WhisperX...")
+print("📥 Loading WhisperX model...")
 whisper_model = whisperx.load_model(
     WHISPER_MODEL,
     device=torch_device,
@@ -46,29 +45,21 @@ ner = pipeline(
     device=device
 )
 
-# ================= UTILS ================= #
+# ================= CORE ================= #
 
-def normalize(text: str) -> str:
-    return text.lower().translate(
-        str.maketrans("", "", string.punctuation)
-    )
+def run_audio_redaction(input_audio: str):
+    print(f"\n🎧 Input audio: {input_audio}")
 
-# ================= CORE FUNCTION ================= #
+    audio = AudioSegment.from_file(input_audio).set_channels(1)
 
-def run_audio_redaction(input_audio: str, output_audio: str):
-    print(f"🎧 Input audio: {input_audio}")
-
-    if not os.path.exists(input_audio):
-        raise RuntimeError(f"❌ Input audio not found: {input_audio}")
-
-    # ================= TRANSCRIPTION ================= #
-
+    # -------- Transcription -------- #
     print("📝 Transcribing...")
     result = whisper_model.transcribe(input_audio)
 
     language = result.get("language", "en")
     print(f"🌍 Language: {language}")
 
+    # -------- Alignment -------- #
     print("⏱️ Aligning words...")
     align_model, metadata = whisperx.load_align_model(
         language_code=language,
@@ -86,112 +77,119 @@ def run_audio_redaction(input_audio: str, output_audio: str):
     words = aligned["word_segments"]
     print(f"✅ Words detected: {len(words)}")
 
-    # ================= PRINT WORDS (RESTORED) ================= #
+    # -------- Build transcript with CHAR OFFSETS -------- #
+    transcript = ""
+    word_meta = []
 
-    print("\n🎧 WORDS IN AUDIO:\n")
     for w in words:
-        print(f"[{w['start']:.2f}s - {w['end']:.2f}s] {w['word']}")
+        start_char = len(transcript)
+        token = w["word"]
+        transcript += token + " "
+        end_char = len(transcript)
 
-    # ================= NORMALIZATION ================= #
+        word_meta.append({
+            "word": token,
+            "start_char": start_char,
+            "end_char": end_char,
+            "start_time": w["start"],
+            "end_time": w["end"],
+        })
 
-    norm_words = [
-        {
-            "word": normalize(w["word"]),
-            "start": w["start"],
-            "end": w["end"]
-        }
-        for w in words
-    ]
+    transcript = transcript.strip()
 
-    full_text = " ".join(w["word"] for w in norm_words)
+    # -------- NER (CHAR-BASED) -------- #
+    print("\n🔍 NER-based PII detection...")
+    ner_results = ner(transcript)
 
-    # ================= MATCHING ================= #
-
-    def find_timing(text):
-        tokens = normalize(text).split()
-        for i in range(len(norm_words)):
-            seq = []
-            for j in range(i, min(i + len(tokens) + 2, len(norm_words))):
-                seq.append(norm_words[j]["word"])
-                if seq == tokens:
-                    return norm_words[i]["start"], norm_words[j]["end"]
-        return None
-
+    redacted_word_indices = set()
     redaction_intervals = []
 
-    # ================= NER ================= #
+    for ent in ner_results:
+        if ent["entity_group"] not in NER_LABELS:
+            continue
 
-    print("\n🔍 NER-based PII detection...")
-    for ent in ner(" ".join(w["word"] for w in words)):
-        if ent["entity_group"] in NER_LABELS:
-            timing = find_timing(ent["word"])
-            if timing:
-                redaction_intervals.append(timing)
-                print(f"❌ {ent['word']} | {ent['entity_group']}")
+        ent_start = ent["start"]
+        ent_end = ent["end"]
 
-    # ================= REGEX ================= #
+        print(f"❌ {ent['word']} | {ent['entity_group']}")
 
+        for i, w in enumerate(word_meta):
+            if not (w["end_char"] <= ent_start or w["start_char"] >= ent_end):
+                redacted_word_indices.add(i)
+                redaction_intervals.append(
+                    (w["start_time"], w["end_time"])
+                )
+
+    # -------- Regex (PHONE) -------- #
     print("\n🔍 Regex-based PII detection...")
+    for match in re.finditer(r"\d{3}[-\s]?\d{3}[-\s]?\d{4}", transcript):
+        print(f"❌ {match.group()} | PHONE")
+        for i, w in enumerate(word_meta):
+            if not (w["end_char"] <= match.start() or w["start_char"] >= match.end()):
+                redacted_word_indices.add(i)
+                redaction_intervals.append(
+                    (w["start_time"], w["end_time"])
+                )
 
-    REGEX_PATTERNS = {
-        "PHONE": r"\b\d{3}[-\s]?\d{3}[-\s]?\d{4}\b",
-        "EMAIL": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
-        "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
-        "CREDIT_CARD": r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b",
-    }
+    # -------- Merge audio intervals -------- #
+    redaction_intervals = sorted(redaction_intervals)
+    merged_intervals = []
+    for start, end in redaction_intervals:
+        if not merged_intervals or start > merged_intervals[-1][1]:
+            merged_intervals.append([start, end])
+        else:
+            merged_intervals[-1][1] = max(merged_intervals[-1][1], end)
 
-    for label, pattern in REGEX_PATTERNS.items():
-        for match in re.finditer(pattern, full_text):
-            timing = find_timing(match.group())
-            if timing:
-                redaction_intervals.append(timing)
-                print(f"❌ {match.group()} | {label}")
+    # -------- Build REDACTED TEXT -------- #
+    redacted_words = [
+        "beep" if i in redacted_word_indices else w["word"]
+        for i, w in enumerate(word_meta)
+    ]
 
-    # ================= AUDIO REDACTION ================= #
+    redacted_text = " ".join(redacted_words)
 
+    txt_path = os.path.join(OUTPUT_DIR, "redacted.txt")
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write(redacted_text)
+
+    print(f"\n📄 Redacted text saved → {txt_path}")
+
+    # -------- Audio redaction -------- #
     print("\n🔊 Applying audio redaction...")
-
-    audio = AudioSegment.from_file(input_audio).set_channels(1)
 
     beep = Sine(BEEP_FREQ).to_audio_segment(
         duration=MIN_BEEP_MS,
         volume=-18
     )
 
-    redacted = AudioSegment.empty()
+    redacted_audio = AudioSegment.empty()
     last_end_ms = 0
 
-    for start, end in sorted(redaction_intervals):
+    for start, end in merged_intervals:
         start_ms = int(start * 1000)
         end_ms = int(end * 1000)
 
-        redacted += audio[last_end_ms:start_ms]
-
+        redacted_audio += audio[last_end_ms:start_ms]
         duration = max(MIN_BEEP_MS, end_ms - start_ms)
-        redacted += beep[:duration].fade_in(10).fade_out(10)
-
+        redacted_audio += beep[:duration].fade_in(10).fade_out(10)
         last_end_ms = end_ms
 
-    redacted += audio[last_end_ms:]
+    redacted_audio += audio[last_end_ms:]
 
-    os.makedirs(os.path.dirname(output_audio), exist_ok=True)
-    redacted.export(output_audio, format="wav")
+    out_audio_path = os.path.join(OUTPUT_DIR, "redacted.wav")
+    redacted_audio.export(out_audio_path, format="wav")
 
-    print(f"\n✅ REDACTED AUDIO SAVED → {output_audio}")
-    return output_audio
+    print(f"\n✅ Redacted audio saved → {out_audio_path}")
 
-# ================= CLI DEMO (RESTORED) ================= #
+# ================= ENTRY ================= #
 
 if __name__ == "__main__":
     audio_files = [
         f for f in os.listdir(INPUT_DIR)
-        if f.lower().endswith((".wav", ".mp3", ".ogg", ".m4a", ".flac"))
+        if f.lower().endswith((".wav", ".mp3", ".m4a", ".flac", ".ogg"))
     ]
 
     if not audio_files:
         raise RuntimeError("❌ No audio file found in input/")
 
-    input_audio = os.path.join(INPUT_DIR, audio_files[0])
-    output_audio = os.path.join(OUTPUT_DIR, "redacted.wav")
-
-    run_audio_redaction(input_audio, output_audio)
+    run_audio_redaction(os.path.join(INPUT_DIR, audio_files[0]))
