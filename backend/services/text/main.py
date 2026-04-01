@@ -75,7 +75,7 @@ for label, pattern in patterns.items():
 spans = sorted(spans, key=lambda x: x[0], reverse=True)
 
 redacted_text = text
-
+ 
 for start, end, original, label in spans:
     if original not in replacements:
         if redaction_level == 1:

@@ -6,6 +6,7 @@ exports.redactText = (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
+  console.log("Received file:", req.file.originalname);
 
   const text = req.file.buffer.toString("utf-8");
 
@@ -16,7 +17,7 @@ exports.redactText = (req, res) => {
     "../services/text/main.py"
   );
 
-  const py = spawn("C:\\Users\\Satyam\\miniconda3\\envs\\privguard\\python.exe", [scriptPath, level]);
+  const py = spawn("C:\\Users\\Satyam\\miniconda3\\envs\\privguardtext\\python.exe", [scriptPath, level]);
 
   let result = "";
   let error = "";
@@ -36,6 +37,6 @@ exports.redactText = (req, res) => {
     if (code !== 0) {
       return res.status(500).json({ error });
     }
-    res.json({ redacted: result.trim() });
+    res.json({ redacted: result });
   });
 };
