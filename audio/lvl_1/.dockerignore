@@ -1,0 +1,30 @@
+# Ignore virtual environments
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore unnecessary folders
+input/
+output/
+
+# Ignore specific files
+app.py
+extract-project.js
+project-code-export.txt
+example-banned-words.txt
+README.md
+
+# Git files
+.git/
+.gitignore
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/

@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audio-redaction
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: audio-redaction
+  template:
+    metadata:
+      labels:
+        app: audio-redaction
+    spec:
+      containers:
+      - name: redactor
+        image: panchalmeet/audioredaction-lvl1:v4
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
