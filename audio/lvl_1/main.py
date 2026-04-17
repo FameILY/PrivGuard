@@ -62,7 +62,7 @@ app.add_middleware(
 
 # ================= CORE ================= #
 
-def run_audio_redaction(input_path: str, output_path: str):
+def run_audio_redaction(input_path: str, output_path: str,mode: str = "beep"):
     print(f"\n🎧 Processing audio...")
 
     audio = AudioSegment.from_file(input_path).set_channels(1)
@@ -159,7 +159,11 @@ def run_audio_redaction(input_path: str, output_path: str):
         end_ms = int(end * 1000)
         redacted_audio += audio[last_end_ms:start_ms]
         duration = max(MIN_BEEP_MS, end_ms - start_ms)
-        redacted_audio += beep[:duration].fade_in(10).fade_out(10)
+        # redacted_audio += beep[:duration].fade_in(10).fade_out(10)
+        if mode == "silence":
+            redacted_audio += AudioSegment.silent(duration=duration)
+        else:
+            redacted_audio += beep[:duration].fade_in(10).fade_out(10)
         last_end_ms = end_ms
 
     redacted_audio += audio[last_end_ms:]
