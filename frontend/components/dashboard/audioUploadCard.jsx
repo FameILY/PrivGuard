@@ -122,7 +122,7 @@ export default function AudioUploadCard({
               value={redactionLevel}
               onValueChange={onRedactionLevelChange}
               min={1}
-              max={3}
+              max={2}
               step={1}
               disabled={isProcessing}
               className="mb-4"
@@ -131,7 +131,7 @@ export default function AudioUploadCard({
             <div className="flex justify-between text-xs text-gray-500 px-1">
               <span className="text-center flex-1">Beep</span>
               <span className="text-center flex-1">Silence</span>
-              <span className="text-center flex-1">Voice Mask</span>
+            
             </div>
           </div>
           

@@ -127,10 +127,5 @@ export const audioRedactionLevels = {
     label: "Silence Gaps", 
     description: "Silence replacement - sensitive audio replaced with silent gaps",
     color: "text-yellow-400" 
-  },
-  3: { 
-    label: "Voice Masking", 
-    description: "Voice distortion - sensitive audio masked with distorted voice to maintain flow",
-    color: "text-red-400" 
   }
 };
